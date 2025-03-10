@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анализ звонков</title>
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Дополнительные стили -->
+    <style>
+        body {
+            background: linear-gradient(135deg, #6e8efb, #a777e3);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-family: 'Arial', sans-serif;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0px 10px 30px rgba(0, 0, 0, 0.2);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            font-weight: bold;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            border: none;
+            transition: 0.3s;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .spinner-border {
+            display: none;
+        }
+
+        .result-box {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            display: none;
+            text-align: left;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>📞 Анализ звонков</h1>
+        <p>Загрузите аудиофайл для анализа</p>
+
+        <form id="uploadForm">
+            <input type="file" id="audioFile" class="form-control mb-3" accept=".wav,.mp3,.ogg">
+            <button type="button" class="btn btn-primary w-100" onclick="uploadFile()">
+                <span id="uploadText">Загрузить и анализировать</span>
+                <div class="spinner-border spinner-border-sm text-light" id="loadingSpinner" role="status"></div>
+            </button>
+        </form>
+
+        <div id="result" class="result-box">
+            <h3>Результат анализа:</h3>
+            <div id="analysisContent"></div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        function uploadFile() {
+            let fileInput = document.getElementById("audioFile");
+            let file = fileInput.files[0];
+
+            if (!file) {
+                alert("Выберите файл для загрузки!");
+                return;
+            }
+
+            let formData = new FormData();
+            formData.append("file", file);
+
+            let button = document.querySelector("button");
+            let uploadText = document.getElementById("uploadText");
+            let spinner = document.getElementById("loadingSpinner");
+
+            // Показываем загрузочный спиннер
+            button.disabled = true;
+            uploadText.style.display = "none";
+            spinner.style.display = "inline-block";
+
+            fetch("/analyze", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    formatAnalysis(data.result);
+                    document.getElementById("result").style.display = "block";
+                } else {
+                    alert("Ошибка: " + data.error);
+                }
+            })
+            .catch(error => {
+                console.error("Ошибка:", error);
+                alert("Ошибка отправки файла!");
+            })
+            .finally(() => {
+                button.disabled = false;
+                uploadText.style.display = "inline";
+                spinner.style.display = "none";
+            });
+        }
+
+        function formatAnalysis(rawText) {
+            const contentDiv = document.getElementById("analysisContent");
+            contentDiv.innerHTML = ""; // Очищаем старый текст
+
+            let lines = rawText.split("\n");
+            lines.forEach(line => {
+                if (line.startsWith("**Тон:**")) {
+                    let sentiment = line.match(/\*\*(.*?)\*\*/)[1];
+                    let colorClass = sentiment.includes("Негативный") ? "bg-danger" :
+                                     sentiment.includes("Позитивный") ? "bg-success" :
+                                     "bg-warning";
+                    contentDiv.innerHTML += `<h4>🗣 Тон:</h4> <span class="badge ${colorClass}">${sentiment}</span><br><p>${line.replace("**Тон:**", "").replace(`**${sentiment}**`, "").trim()}</p>`;
+                }
+                else if (line.startsWith("**Профессионализм менеджера:**")) {
+                    let professionalism = line.match(/\*\*(.*?)\*\*/)[1];
+                    let colorClass = professionalism.includes("Высокий") ? "bg-success" :
+                                     professionalism.includes("Средний") ? "bg-warning" :
+                                     "bg-danger";
+                    contentDiv.innerHTML += `<h4>👔 Профессионализм:</h4> <span class="badge ${colorClass}">${professionalism}</span><br><p>${line.replace("**Профессионализм менеджера:**", "").replace(`**${professionalism}**`, "").trim()}</p>`;
+                }
+                else if (line.startsWith("**Вежливость менеджера:**")) {
+                    let politeness = line.match(/\*\*(.*?)\*\*/)[1];
+                    let colorClass = politeness.includes("Высокая") ? "bg-success" :
+                                     politeness.includes("Средняя") ? "bg-warning" :
+                                     "bg-danger";
+                    contentDiv.innerHTML += `<h4>😊 Вежливость:</h4> <span class="badge ${colorClass}">${politeness}</span><br><p>${line.replace("**Вежливость менеджера:**", "").replace(`**${politeness}**`, "").trim()}</p>`;
+                }
+                else if (line.startsWith("**Комментарий:**")) {
+                    contentDiv.innerHTML += `<h4>💬 Комментарий:</h4><blockquote class="blockquote">${line.replace("**Комментарий:**", "").trim()}</blockquote>`;
+                }
+                else {
+                    contentDiv.innerHTML += `<p>${line}</p>`;
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>
